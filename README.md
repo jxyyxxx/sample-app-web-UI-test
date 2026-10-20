@@ -1,6 +1,11 @@
 # SauceDemo Web UI 自动化测试
 
+[![UI CI](https://github.com/jxyyxxx/sample-app-web-UI-test/actions/workflows/ui-ci.yml/badge.svg)](https://github.com/jxyyxxx/sample-app-web-UI-test/actions/workflows/ui-ci.yml)
+
 基于 Playwright + pytest 的 Web UI 自动化测试项目。被测应用是开源电商练习站 SauceDemo（MIT 协议，源码 [saucelabs/sample-app-web](https://github.com/saucelabs/sample-app-web)），**支持本地部署**，也可以指向线上 https://www.saucedemo.com 做对照。
+
+- 仓库地址：<https://github.com/jxyyxxx/sample-app-web-UI-test>
+- 在线 Allure 报告：<https://jxyyxxx.github.io/sample-app-web-UI-test/>（需在仓库 Settings → Pages 里把 Source 设为 `gh-pages` 分支后生效）
 
 当前目录约定：
 
