@@ -71,17 +71,17 @@ python -m venv .venv
 ### 3. 运行用例
 
 ```cmd
-:: 打本地（推荐）
-set BASE_URL=http://localhost:3000
+:: 默认打本地（http://localhost:3000），不用设环境变量
 .venv\Scripts\pytest              :: 全量 10 条
 .venv\Scripts\pytest -m smoke     :: 冒烟 3 条
 .venv\Scripts\pytest --headed     :: 有界面跑，方便看
 
-:: 也可以打线上（不设 BASE_URL 时默认）
+:: 需要打线上时，覆盖 BASE_URL 即可
+set BASE_URL=https://www.saucedemo.com
 .venv\Scripts\pytest -q
 ```
 
-PowerShell 里用 `$env:BASE_URL = 'http://localhost:3000'`。
+PowerShell 里用 `$env:BASE_URL = 'https://www.saucedemo.com'`（不设则为本地默认值）。
 
 本地跑完会自动生成 Allure 报告并打开（`CI=true` 时跳过，由流水线生成）。
 也可以手动：`allure open reports/allure-html`。
@@ -105,7 +105,7 @@ PowerShell 里用 `$env:BASE_URL = 'http://localhost:3000'`。
 4. **登录态复用**：`logged_in_page` fixture 统一完成登录，购物车/结算用例不重复写登录步骤。
 5. **数据驱动**：账号数据放 `data/accounts.yaml`，加账号不改代码。
 6. **Allure 步骤链**：页面操作与断言都用 `allure.step` 包起来，失败时能定位到"哪一页、哪一步"。
-7. **环境可切换**：`BASE_URL` 决定打本地还是线上，用例代码不动。
+7. **环境可切换**：默认打本地 `http://localhost:3000`，用 `BASE_URL` 可切到线上；用例代码不动。
 8. **可造缺陷**：本地部署后可以改应用源码注入 bug，验证用例真的能抓到问题（见下节）。
 
 ## 缺陷注入演示

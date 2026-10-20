@@ -1,13 +1,14 @@
 # ============================================================
 # 配置：被测地址、账号数据、报告目录
-# 被测地址可用环境变量 BASE_URL 覆盖（例如指向自己部署的实例）
+# 默认打本地部署的实例（npm run start 起在 3000 端口）；
+# 需要打线上时用环境变量覆盖：BASE_URL=https://www.saucedemo.com
 # ============================================================
 
 import os
 
 import yaml
 
-BASE_URL = os.getenv("BASE_URL", "https://www.saucedemo.com")
+BASE_URL = os.getenv("BASE_URL", "http://localhost:3000")
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(ROOT_DIR, "data")
