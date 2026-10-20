@@ -1,8 +1,14 @@
 # SauceDemo Web UI 自动化测试
 
-基于 Playwright + pytest 的 Web UI 自动化测试项目，被测站点是公开的电商练习网站 [SauceDemo](https://www.saucedemo.com)（登录、商品列表、购物车、结算）。
+基于 Playwright + pytest 的 Web UI 自动化测试项目。被测应用是开源电商练习站 SauceDemo（MIT 协议，源码 [saucelabs/sample-app-web](https://github.com/saucelabs/sample-app-web)），**支持本地部署**，也可以指向线上 https://www.saucedemo.com 做对照。
 
-与同目录的接口自动化项目形成分层：**UI 冒烟 → 接口回归 → 性能容量**。
+当前目录约定：
+
+```
+D:\sample-app-web项目\
+├── sample-app-web\                 被测应用源码（npm run start → http://localhost:3000）
+└── saucedemo-ui-automation框架\     本测试项目
+```
 
 ## 技术栈
 
@@ -15,13 +21,13 @@
 | 报告 | Allure（失败自动截图、步骤链、本地默认中文） |
 | CI | GitHub Actions（push / PR / 手动） |
 
-## 目录结构
+## 目录结构（测试项目）
 
 ```
-saucedemo-ui-automation/
+saucedemo-ui-automation框架/
 ├── .github/workflows/ui-ci.yml    CI：装 Chromium → 跑用例 → 发布 Allure
 ├── common/
-│   ├── config.py                  被测地址、账号数据、报告目录
+│   ├── config.py                  被测地址（BASE_URL 可覆盖）、账号数据、报告目录
 │   └── reporting.py               Allure 报告生成 + 默认中文
 ├── data/accounts.yaml             账号数据（标准/锁定/错误密码）
 ├── pages/                         Page Object
@@ -35,6 +41,7 @@ saucedemo-ui-automation/
 │   ├── test_inventory.py          列表/加购/排序 3 条
 │   ├── test_cart.py               购物车 1 条
 │   └── test_checkout.py           结算 2 条
+├── docs/defect-injection-demo.md  缺陷注入演示记录
 ├── conftest.py                    登录态 fixture + 失败截图 + 会话结束生成报告
 ├── pytest.ini                     标记、Allure 目录、strict-markers
 └── requirements.txt
@@ -42,30 +49,42 @@ saucedemo-ui-automation/
 
 ## 快速开始
 
-```cmd
-cd /d D:\saucedemo-ui-automation
+### 1. 启动被测应用（本地，推荐）
 
-:: 1. 虚拟环境 + 依赖
+```cmd
+cd /d D:\sample-app-web项目\sample-app-web
+npm install
+npm run start                 :: Vite 起在 http://localhost:3000
+```
+
+> Node 要求 `>=24.9.0`（当前本机 24.19.0 满足）；`npm run start` 是开发服务器，改代码会自动热更新。
+
+### 2. 安装测试依赖（首次）
+
+```cmd
+cd /d D:\sample-app-web项目\saucedemo-ui-automation框架
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
-
-:: 2. 下载 Chromium（约 150MB，只需一次）
 .venv\Scripts\playwright install chromium
+```
 
-:: 3. 跑用例
+### 3. 运行用例
+
+```cmd
+:: 打本地（推荐）
+set BASE_URL=http://localhost:3000
 .venv\Scripts\pytest              :: 全量 10 条
 .venv\Scripts\pytest -m smoke     :: 冒烟 3 条
 .venv\Scripts\pytest --headed     :: 有界面跑，方便看
+
+:: 也可以打线上（不设 BASE_URL 时默认）
+.venv\Scripts\pytest -q
 ```
+
+PowerShell 里用 `$env:BASE_URL = 'http://localhost:3000'`。
 
 本地跑完会自动生成 Allure 报告并打开（`CI=true` 时跳过，由流水线生成）。
-也可以手动：`.venv\Scripts\pytest` 后执行 `allure open reports/allure-html`。
-
-**切换被测地址**（指向自己部署的实例）：
-
-```powershell
-$env:BASE_URL = 'http://localhost:8080'; .venv\Scripts\pytest -q
-```
+也可以手动：`allure open reports/allure-html`。
 
 ## 用例清单（10 条）
 
@@ -86,15 +105,29 @@ $env:BASE_URL = 'http://localhost:8080'; .venv\Scripts\pytest -q
 4. **登录态复用**：`logged_in_page` fixture 统一完成登录，购物车/结算用例不重复写登录步骤。
 5. **数据驱动**：账号数据放 `data/accounts.yaml`，加账号不改代码。
 6. **Allure 步骤链**：页面操作与断言都用 `allure.step` 包起来，失败时能定位到"哪一页、哪一步"。
+7. **环境可切换**：`BASE_URL` 决定打本地还是线上，用例代码不动。
+8. **可造缺陷**：本地部署后可以改应用源码注入 bug，验证用例真的能抓到问题（见下节）。
+
+## 缺陷注入演示
+
+本地部署的最大价值是**能造缺陷、验证用例有效性**。做过的演示：
+
+1. 把 `sample-app-web/src/utils/Sorting.js` 里价格升序的比较改成降序（一行）；
+2. 跑 `tests/test_inventory.py::TestInventory::test_sort_price_low_to_high` → **失败**，报错显示实际价格是 49.99 起，而不是 7.99 起；
+3. Allure 报告里带**失败截图**附件；
+4. 还原源码后重跑 → **通过**。
+
+完整记录见 [docs/defect-injection-demo.md](docs/defect-injection-demo.md)。
 
 ## CI
 
 `.github/workflows/ui-ci.yml`：push / PR / 手动触发 → 装依赖与 Chromium → `pytest -q` → `allure generate`（默认中文）→ 上传 artifact；`main` 上成功时发布报告到 GitHub Pages。
 
-> 失败也能拿到报告与截图（`if: always()`），方便排查。
+> 当前 CI 默认打线上站点；后续会改为在流水线里启动本地应用（`npm ci && npm run start`）再跑，避免外网依赖。
 
 ## 已知限制
 
-- 被测站点是公开练习站，UI 可能被官方调整，导致元素定位失效——这也是"UI 自动化要少而稳"的现实例子；
-- 只做 Chromium，未覆盖多浏览器；
-- 未做视觉回归（截图对比）。
+- 只跑 Chromium，未覆盖 Firefox/WebKit；
+- 未做视觉回归（截图对比）；
+- 登录态未用 `storage_state` 复用（每条用例重新登录，约多 2 秒）；
+- 本地应用未纳入本仓库（是独立的上游仓库，放在同级目录 `sample-app-web`）。
