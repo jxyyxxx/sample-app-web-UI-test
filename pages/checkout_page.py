@@ -34,6 +34,16 @@ class CheckoutPage(BasePage):
         self.finish_button.click()
         return self
 
+    @allure.step("断言已进入订单概览")
+    def expect_overview(self):
+        expect(self.page.locator(".summary_subtotal_label")).to_be_visible()
+        return self
+
+    @allure.step("读取订单商品总额（数值）")
+    def subtotal(self):
+        text = self.page.locator(".summary_subtotal_label").inner_text()
+        return float(text.split("$")[1])
+
     @allure.step("断言下单完成")
     def expect_complete(self):
         expect(self.complete_header).to_contain_text("Thank you for your order")

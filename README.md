@@ -38,14 +38,16 @@ saucedemo-ui-automation框架/
 ├── pages/                         Page Object
 │   ├── base_page.py               公共操作（打开页面、URL 断言）
 │   ├── login_page.py              登录页
-│   ├── inventory_page.py          商品列表页（加购、角标、排序）
+│   ├── inventory_page.py          商品列表页（加购、角标、排序、菜单）
+│   ├── product_detail_page.py     商品详情页
 │   ├── cart_page.py               购物车页（移除、结算入口）
-│   └── checkout_page.py           结算页（填写信息、提交、完成）
+│   └── checkout_page.py           结算页（填写信息、提交、完成、总额）
 ├── tests/
-│   ├── test_login.py              登录 4 条
-│   ├── test_inventory.py          列表/加购/排序 3 条
+│   ├── test_login.py              登录 5 条（含登出越权）
+│   ├── test_inventory.py          列表/加购/排序/详情/重置 7 条
 │   ├── test_cart.py               购物车 1 条
-│   └── test_checkout.py           结算 2 条
+│   ├── test_checkout.py           结算 4 条（含总额、邮编校验）
+│   └── test_compat.py             兼容性 1 条（移动端视口）
 ├── docs/defect-injection-demo.md  缺陷注入演示记录
 ├── conftest.py                    登录态 fixture + 失败截图 + 会话结束生成报告
 ├── pytest.ini                     标记、Allure 目录、strict-markers
@@ -77,7 +79,7 @@ python -m venv .venv
 
 ```cmd
 :: 默认打本地（http://localhost:3000），不用设环境变量
-.venv\Scripts\pytest              :: 全量 10 条
+.venv\Scripts\pytest              :: 全量 18 条
 .venv\Scripts\pytest -m smoke     :: 冒烟 3 条
 .venv\Scripts\pytest --headed     :: 有界面跑，方便看
 
@@ -91,16 +93,17 @@ PowerShell 里用 `$env:BASE_URL = 'https://www.saucedemo.com'`（不设则为�
 本地跑完会自动生成 Allure 报告并打开（`CI=true` 时跳过，由流水线生成）。
 也可以手动：`allure open reports/allure-html`。
 
-## 用例清单（10 条）
+## 用例清单（18 条）
 
 | 模块 | 条数 | 覆盖内容 |
 |---|---|---|
-| 登录 | 4 | 标准用户登录成功、锁定用户被拒、密码错误、用户名为空 |
-| 商品列表 | 3 | 加购 1 件角标为 1、加购 2 件角标为 2 且购物车 2 行、价格升序排序生效 |
+| 登录 | 5 | 标准用户登录成功、锁定用户被拒、密码错误、用户名为空、**登出后直接访问内页被拦回登录页** |
+| 商品列表 | 7 | 加购 1 件角标为 1、加购 2 件且购物车 2 行、价格升序/降序、名称 A→Z、商品详情与列表一致、**重置 App State 清空购物车** |
 | 购物车 | 1 | 移除商品后购物车清空、角标消失 |
-| 结算 | 2 | 完整下单流程（加购→结算→填写→完成）、缺少姓名时提示必填 |
+| 结算 | 4 | 完整下单、缺姓名提示、**缺邮编提示**、**订单总额等于各商品价格之和** |
+| 兼容性 | 1 | **移动端视口 390×844 下登录并加购** |
 
-标记：`smoke`（登录成功 + 加购 + 完整下单）、`login`、`inventory`、`cart`、`checkout`。
+标记：`smoke`（登录成功 + 加购 + 完整下单）、`login`、`inventory`、`cart`、`checkout`、`compat`。
 
 ## 设计要点
 
@@ -111,6 +114,7 @@ PowerShell 里用 `$env:BASE_URL = 'https://www.saucedemo.com'`（不设则为�
 5. **数据驱动**：账号数据放 `data/accounts.yaml`，加账号不改代码。
 6. **Allure 步骤链**：页面操作与断言都用 `allure.step` 包起来，失败时能定位到"哪一页、哪一步"。
 7. **环境可切换**：默认打本地 `http://localhost:3000`，用 `BASE_URL` 可切到线上；用例代码不动。
+8. **覆盖维度**：主流程、权限（越权访问）、状态管理（重置）、排序双向、导航、金额计算、表单必填、移动端视口。
 8. **可造缺陷**：本地部署后可以改应用源码注入 bug，验证用例真的能抓到问题（见下节）。
 
 ## 缺陷注入演示

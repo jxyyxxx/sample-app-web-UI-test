@@ -21,6 +21,11 @@ class CartPage(BasePage):
     def item_count(self):
         return self.items.count()
 
+    @allure.step("读取购物车各商品价格（数值）")
+    def item_prices(self):
+        texts = self.page.locator(".cart_item .inventory_item_price").all_inner_texts()
+        return [float(text.replace("$", "")) for text in texts]
+
     @allure.step("断言购物车商品数量为：{count}")
     def expect_item_count(self, count):
         # 用 expect 而不是直接读 count：会重试等待 DOM 更新，避免竞态

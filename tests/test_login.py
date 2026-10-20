@@ -1,7 +1,10 @@
+import re
+
 import allure
 import pytest
+from playwright.sync_api import expect
 
-from common.config import ACCOUNTS
+from common.config import ACCOUNTS, BASE_URL
 from pages.inventory_page import InventoryPage
 from pages.login_page import LoginPage
 
@@ -9,7 +12,7 @@ from pages.login_page import LoginPage
 @allure.feature("登录认证")
 @pytest.mark.login
 class TestLogin:
-    """登录模块：正向 + 锁定用户 + 密码错误 + 用户名为空"""
+    """登录模块：正向 + 锁定用户 + 密码错误 + 用户名为空 + 登出越权"""
 
     @allure.title("标准用户登录成功，进入商品列表")
     @allure.severity(allure.severity_level.CRITICAL)
@@ -36,3 +39,15 @@ class TestLogin:
         LoginPage(page).login("", ACCOUNTS["standard"]["password"]).expect_error(
             "Username is required"
         )
+
+    @allure.title("登出后直接访问商品页会被重定向到登录页")
+    def test_logout_redirects_to_login(self, logged_in_page):
+        InventoryPage(logged_in_page).logout()
+
+        # 模拟"未登录直接输 URL 访问内页"，应被前端路由拦回登录页
+        logged_in_page.goto(BASE_URL.rstrip("/") + "/inventory.html")
+
+        expect(logged_in_page).to_have_url(
+            re.compile(re.escape(BASE_URL.rstrip("/")) + r"/?$")
+        )
+        expect(logged_in_page.locator("#login-button")).to_be_visible()
