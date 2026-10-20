@@ -1,6 +1,11 @@
 # ============================================================
-# UI 自动化 CI：安装 Chromium → 跑 Playwright 用例 → 生成并发布 Allure 报告
-# 触发：push / PR / 手动
+# UI 自动化 CI：克隆并启动被测应用（锁定 commit）→ 跑 Playwright 用例 → 发布 Allure
+#
+# 关键设计：
+#   1. 被测应用从上游仓库克隆并锁定 commit，不从线上站点跑 → 不依赖外网、结果稳定
+#   2. 应用依赖与浏览器都有缓存，避免每次全量下载
+#   3. 用例失败必须让流水线变红；报告与日志用 if: always() 归档
+#   4. 只在 main 上发布报告到 GitHub Pages
 # ============================================================
 
 name: UI CI
@@ -11,20 +16,44 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ui-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
 env:
-  BASE_URL: https://www.saucedemo.com
+  APP_REPO: https://github.com/saucelabs/sample-app-web.git
+  # 被测应用锁定版本：本地验证通过的 commit，升级前先在本地跑一遍全量
+  APP_COMMIT: 292ffbcb0d9c3b26ad0722a5b479e615e039b076
+  BASE_URL: http://localhost:3000
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
-      - name: 拉取代码
+      - name: 拉取测试代码
         uses: actions/checkout@v4
+
+      - name: 克隆被测应用（锁定 commit）
+        run: |
+          set -euo pipefail
+          git clone "$APP_REPO" app
+          git -C app checkout --detach "$APP_COMMIT"
+          echo "被测应用 commit：$(git -C app rev-parse --short HEAD)"
+
+      - name: 安装 Node.js（带 npm 缓存）
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: 安装被测应用依赖
+        run: npm --prefix app ci
 
       - name: 安装 Python
         uses: actions/setup-python@v5
@@ -32,15 +61,39 @@ jobs:
           python-version: '3.11'
           cache: pip
 
-      - name: 安装依赖
+      - name: 安装测试依赖（锁定版本）
         run: |
           pip install -r requirements.txt
           pip check
 
+      - name: 缓存 Playwright 浏览器
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('requirements.txt') }}
+
       - name: 安装 Chromium
         run: playwright install --with-deps chromium
 
-      - name: 运行 UI 用例
+      - name: 启动被测应用并等待就绪
+        run: |
+          set -euo pipefail
+          (cd app && nohup npm run start -- --port 3000 --strictPort > ../app.log 2>&1 &)
+
+          for i in $(seq 1 60); do
+            if curl -fsS "$BASE_URL" > /dev/null 2>&1; then
+              echo "被测应用启动成功（第 ${i} 秒响应正常）"
+              exit 0
+            fi
+            echo "等待应用启动... $i/60"
+            sleep 1
+          done
+
+          echo "::error::被测应用 60 秒内未启动，以下是应用日志"
+          cat app.log || true
+          exit 1
+
+      - name: 运行 UI 用例（打本地应用）
         run: pytest -q
 
       - name: 生成 Allure 报告
@@ -54,7 +107,7 @@ jobs:
             echo "::warning::没有采集到 Allure 结果"
           fi
 
-      - name: 上传报告与截图
+      - name: 上传报告与应用日志
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -62,10 +115,11 @@ jobs:
           path: |
             reports/allure-results
             allure-report
+            app.log
           if-no-files-found: warn
 
       - name: 发布 Allure 报告到 GitHub Pages
-        if: success() && github.ref == 'refs/heads/main'
+        if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

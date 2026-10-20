@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv_old/
 venv/
 
 # pytest / allure
@@ -13,6 +14,7 @@ allure-report/
 # 运行产物
 logs/
 screenshots/
+*.log
 
 # IDE / 系统
 .idea/

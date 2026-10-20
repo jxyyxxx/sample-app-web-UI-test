@@ -121,9 +121,17 @@ PowerShell 里用 `$env:BASE_URL = 'http://localhost:3000'`。
 
 ## CI
 
-`.github/workflows/ui-ci.yml`：push / PR / 手动触发 → 装依赖与 Chromium → `pytest -q` → `allure generate`（默认中文）→ 上传 artifact；`main` 上成功时发布报告到 GitHub Pages。
+`.github/workflows/ui-ci.yml`：push / PR / 手动触发 →
 
-> 当前 CI 默认打线上站点；后续会改为在流水线里启动本地应用（`npm ci && npm run start`）再跑，避免外网依赖。
+1. 拉取测试代码；
+2. 克隆被测应用并 **checkout 到固定 commit**（`APP_COMMIT`，不依赖线上站点）；
+3. `npm ci` 安装应用依赖（带 npm 缓存）；
+4. 安装 Python 依赖与 Chromium（浏览器带缓存）；
+5. 启动应用并轮询 `http://localhost:3000` 直到就绪（60 秒超时则打印 `app.log` 后失败）；
+6. `pytest -q`（`BASE_URL` 指向本地应用）；
+7. `allure generate` + 默认中文 → 上传 artifact；`main` 上成功时发布报告到 GitHub Pages。
+
+> 失败也能拿到报告、截图与应用日志（`if: always()`）。应用版本锁在 commit 上，避免上游改动导致流水线"自己变红"。
 
 ## 已知限制
 
