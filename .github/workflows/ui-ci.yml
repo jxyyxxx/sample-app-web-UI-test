@@ -1,0 +1,73 @@
+# ============================================================
+# UI 自动化 CI：安装 Chromium → 跑 Playwright 用例 → 生成并发布 Allure 报告
+# 触发：push / PR / 手动
+# ============================================================
+
+name: UI CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  BASE_URL: https://www.saucedemo.com
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: 安装依赖
+        run: |
+          pip install -r requirements.txt
+          pip check
+
+      - name: 安装 Chromium
+        run: playwright install --with-deps chromium
+
+      - name: 运行 UI 用例
+        run: pytest -q
+
+      - name: 生成 Allure 报告
+        if: always()
+        run: |
+          if [ -n "$(ls -A reports/allure-results 2>/dev/null || true)" ]; then
+            npm install -g allure-commandline@2.30.0
+            allure generate reports/allure-results -o allure-report --clean
+            python -m common.reporting allure-report
+          else
+            echo "::warning::没有采集到 Allure 结果"
+          fi
+
+      - name: 上传报告与截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-reports-${{ github.run_attempt }}
+          path: |
+            reports/allure-results
+            allure-report
+          if-no-files-found: warn
+
+      - name: 发布 Allure 报告到 GitHub Pages
+        if: success() && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./allure-report
+          commit_message: 'ci: 更新 UI 自动化报告 (${{ github.sha }})'

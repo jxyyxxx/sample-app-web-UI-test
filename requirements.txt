@@ -1,0 +1,6 @@
+# UI 自动化依赖范围：下界=最低支持版本，上界=下一个大版本
+playwright>=1.47,<2.0
+pytest-playwright>=0.5,<1.0
+pytest>=8.0,<10.0
+allure-pytest>=2.12,<3.0
+PyYAML>=6.0,<7.0

@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# pytest / allure
+.pytest_cache/
+reports/
+allure-results/
+allure-report/
+
+# 运行产物
+logs/
+screenshots/
+
+# IDE / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
