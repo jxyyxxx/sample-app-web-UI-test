@@ -23,7 +23,7 @@ D:\sample-app-web项目\
 | UI 框架 | Playwright（Chromium，headless） |
 | 测试框架 | pytest + pytest-playwright |
 | 页面封装 | Page Object 模式 |
-| 报告 | Allure（失败自动截图、步骤链、本地默认中文） |
+| 报告 | Allure（环境面板含被测地址/浏览器/应用 commit，失败自动截图、步骤链、默认中文） |
 | CI | GitHub Actions（push / PR / 手动） |
 
 ## 目录结构（测试项目）
@@ -64,8 +64,6 @@ saucedemo-ui-automation框架/
 ├── conftest.py                     登录态 fixture + 失败截图 + 会话结束生成报告
 ├── pytest.ini                      标记、testpaths=testcases、strict-markers
 ├── run.py                          本地一键入口（pytest.main 全量执行）
-├── run-tests.cmd                   一键跑用例（直调 .venv 里的 python -m pytest，参数可透传）
-├── start-app.cmd                   一键启动被测应用（3000 端口）
 └── requirements.txt
 ```
 
@@ -78,8 +76,6 @@ cd /d D:\sample-app-web项目\sample-app-web
 npm install
 npm run start                 :: Vite 起在 http://localhost:3000
 ```
-
-也可以直接双击 `start-app.cmd` 一键启动。
 
 > Node 要求 `>=24.9.0`（当前本机 24.19.0 满足）；`npm run start` 是开发服务器，改代码会自动热更新。
 
@@ -104,8 +100,6 @@ python -m venv .venv
 set BASE_URL=https://www.saucedemo.com
 .venv\Scripts\pytest -q
 ```
-
-也可以直接双击 `run-tests.cmd` 一键跑全量；想带参数就在命令行里 `run-tests.cmd -m smoke`，脚本会把参数原样透传给 pytest。
 
 PowerShell 里用 `$env:BASE_URL = 'https://www.saucedemo.com'`（不设则为本地默认值）。
 
@@ -153,11 +147,3 @@ PowerShell 里用 `$env:BASE_URL = 'https://www.saucedemo.com'`（不设则为�
 7. `allure generate` + 默认中文 → 上传 artifact；`main` 上成功时发布报告到 GitHub Pages。
 
 > 失败也能拿到报告、截图与应用日志（`if: always()`）。应用版本锁在 commit 上，避免上游改动导致流水线"自己变红"。
-
-## 已知限制
-
-- 只跑 Chromium，未覆盖 Firefox/WebKit；
-- 未做视觉回归（截图对比）；
-- 登录态未用 `storage_state` 复用（每条用例重新登录，约多 2 秒）；
-- 本地应用未纳入本仓库（是独立的上游仓库，放在同级目录 `sample-app-web`）；
-- `testcases/catalog` 依赖被测应用里的动态目录页面（滚动加载 / loading 圈 / 轮播），这些页面属于本地演示用的注入场景，上游仓库不一定有。
