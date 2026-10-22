@@ -1,12 +1,22 @@
+# ============================================================
+# 用例层：登录模块
+# 覆盖：正向登录、锁定用户、密码错误、用户名为空、登出后越权访问
+# ============================================================
+
 import re
 
 import allure
 import pytest
 from playwright.sync_api import expect
 
-from common.config import ACCOUNTS, BASE_URL
+from common.data_loader import data_loader
+from common.locator_utils import by_test_id
+from config.settings import BASE_URL
 from pages.inventory_page import InventoryPage
 from pages.login_page import LoginPage
+
+# 从 YAML 读取账号数据，加账号不用改代码
+accounts = data_loader.load("login/accounts.yaml")
 
 
 @allure.feature("登录认证")
@@ -18,25 +28,27 @@ class TestLogin:
     @allure.severity(allure.severity_level.CRITICAL)
     @pytest.mark.smoke
     def test_login_success(self, page):
-        account = ACCOUNTS["standard"]
-        LoginPage(page).login(account["username"], account["password"])
+        account = accounts["standard"]
+        LoginPage(page).login(
+            account["username"], account["password"]
+        ).expect_session_cookie(account["username"])
         InventoryPage(page).expect_loaded()
 
     @allure.title("锁定用户登录被拒")
     def test_login_locked_user(self, page):
-        account = ACCOUNTS["locked"]
+        account = accounts["locked"]
         LoginPage(page).login(account["username"], account["password"]).expect_error("locked out")
 
     @allure.title("密码错误时提示不匹配")
     def test_login_wrong_password(self, page):
-        account = ACCOUNTS["wrong_password"]
+        account = accounts["wrong_password"]
         LoginPage(page).login(account["username"], account["password"]).expect_error(
             "Username and password do not match"
         )
 
     @allure.title("用户名为空时提示必填")
     def test_login_empty_username(self, page):
-        LoginPage(page).login("", ACCOUNTS["standard"]["password"]).expect_error(
+        LoginPage(page).login("", accounts["standard"]["password"]).expect_error(
             "Username is required"
         )
 
@@ -50,4 +62,4 @@ class TestLogin:
         expect(logged_in_page).to_have_url(
             re.compile(re.escape(BASE_URL.rstrip("/")) + r"/?$")
         )
-        expect(logged_in_page.locator("#login-button")).to_be_visible()
+        expect(logged_in_page.locator(by_test_id("login-button"))).to_be_visible()

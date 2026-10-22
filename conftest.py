@@ -1,5 +1,10 @@
 # ============================================================
-# 夹具层：登录态 fixture + 失败截图 + 会话结束生成报告
+# 夹具层：全局公共 fixture 统一放这里
+# 作用：封装公共前置逻辑、公共资源
+#      所有测试文件不需要 import，直接就能用里面的 fixture
+#
+# 报告相关（环境面板、生成、默认语言）在 common/reporting.py，
+# 这里只负责在 pytest 钩子里调用它。
 # ============================================================
 
 import os
@@ -7,30 +12,42 @@ import os
 import allure
 import pytest
 
-from common.config import ACCOUNTS, REPORT_DIR, RESULTS_DIR
-from common.reporting import generate_local_report
+from common.data_loader import data_loader
+from common.reporting import generate_local_report, write_allure_metadata
 from pages.login_page import LoginPage
 
+# 账号数据：data/login/accounts.yaml（加账号不用改代码）
+accounts = data_loader.load("login/accounts.yaml")
 
+
+# ------------------------------------------------------------
+# 1. 登录页：直接打开登录页，供登录相关用例使用
+#    scope="function"：每条用例都从干净的页面开始
+# ------------------------------------------------------------
 @pytest.fixture
 def login_page(page):
     """返回已打开登录页的 Page Object"""
     return LoginPage(page).open()
 
 
+# ------------------------------------------------------------
+# 2. 已登录页面：统一完成标准用户登录
+#    购物车/结算等用例直接以已登录状态开始，不重复写登录步骤
+# ------------------------------------------------------------
 @pytest.fixture
 def logged_in_page(page):
-    """返回已完成标准用户登录的 page（用例直接以已登录状态开始）"""
-    LoginPage(page).login(
-        ACCOUNTS["standard"]["username"],
-        ACCOUNTS["standard"]["password"],
-    )
+    """返回已完成标准用户登录的 page"""
+    account = accounts["standard"]
+    LoginPage(page).login(account["username"], account["password"])
     return page
 
 
+# ------------------------------------------------------------
+# 3. 失败截图：用例失败时截全页并挂到 Allure 报告
+#    只拦 call 阶段的失败，不影响用例本身的结果
+# ------------------------------------------------------------
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
-    """用例失败时自动截图并挂到 Allure 报告里"""
     outcome = yield
     report = outcome.get_result()
 
@@ -49,8 +66,22 @@ def pytest_runtest_makereport(item, call):
         pass
 
 
+# ------------------------------------------------------------
+# 4. 会话结束：写报告环境面板 + 本地生成报告
+#    CI 里跳过生成：workflow 已显式生成，且没有浏览器可开
+# ------------------------------------------------------------
 def pytest_sessionfinish(session, exitstatus):
-    """本地跑完自动生成报告并打开；CI 里由 workflow 生成"""
+    """
+    测试会话结束后：
+    1. 写入环境面板（本地和 CI 都需要）
+    2. 本地生成 Allure 报告、设中文、打开浏览器
+
+    environment.properties 放在会话结束时写，是为了避开 allure 的
+    --clean-alluredir：它在会话开始时清空结果目录，先写会被清掉。
+    """
+    write_allure_metadata(session)
+
     if os.getenv("CI"):
         return
-    generate_local_report(RESULTS_DIR, REPORT_DIR)
+
+    generate_local_report()

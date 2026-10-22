@@ -48,9 +48,9 @@ saucedemo-ui-automation框架/
 │   ├── test_cart.py               购物车 1 条
 │   ├── test_checkout.py           结算 4 条（含总额、邮编校验）
 │   └── test_compat.py             兼容性 1 条（移动端视口）
-├── docs/defect-injection-demo.md  缺陷注入演示记录
 ├── conftest.py                    登录态 fixture + 失败截图 + 会话结束生成报告
 ├── pytest.ini                     标记、Allure 目录、strict-markers
+├── run.py                         本地一键入口（pytest.main 全量执行）
 └── requirements.txt
 ```
 
@@ -115,18 +115,6 @@ PowerShell 里用 `$env:BASE_URL = 'https://www.saucedemo.com'`（不设则为�
 6. **Allure 步骤链**：页面操作与断言都用 `allure.step` 包起来，失败时能定位到"哪一页、哪一步"。
 7. **环境可切换**：默认打本地 `http://localhost:3000`，用 `BASE_URL` 可切到线上；用例代码不动。
 8. **覆盖维度**：主流程、权限（越权访问）、状态管理（重置）、排序双向、导航、金额计算、表单必填、移动端视口。
-8. **可造缺陷**：本地部署后可以改应用源码注入 bug，验证用例真的能抓到问题（见下节）。
-
-## 缺陷注入演示
-
-本地部署的最大价值是**能造缺陷、验证用例有效性**。做过的演示：
-
-1. 把 `sample-app-web/src/utils/Sorting.js` 里价格升序的比较改成降序（一行）；
-2. 跑 `tests/test_inventory.py::TestInventory::test_sort_price_low_to_high` → **失败**，报错显示实际价格是 49.99 起，而不是 7.99 起；
-3. Allure 报告里带**失败截图**附件；
-4. 还原源码后重跑 → **通过**。
-
-完整记录见 [docs/defect-injection-demo.md](docs/defect-injection-demo.md)。
 
 ## CI
 
