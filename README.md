@@ -64,8 +64,6 @@ saucedemo-ui-automation框架/
 ├── conftest.py                     登录态 fixture + 失败截图 + 会话结束生成报告
 ├── pytest.ini                      标记、testpaths=testcases、strict-markers
 ├── run.py                          本地一键入口（pytest.main 全量执行）
-├── run-tests.cmd                   一键跑用例（直调 .venv 里的 python -m pytest，参数可透传）
-├── start-app.cmd                   一键启动被测应用（3000 端口）
 └── requirements.txt
 ```
 
@@ -78,8 +76,6 @@ cd /d D:\sample-app-web项目\sample-app-web
 npm install
 npm run start                 :: Vite 起在 http://localhost:3000
 ```
-
-也可以直接双击 `start-app.cmd` 一键启动。
 
 > Node 要求 `>=24.9.0`（当前本机 24.19.0 满足）；`npm run start` 是开发服务器，改代码会自动热更新。
 
@@ -104,8 +100,6 @@ python -m venv .venv
 set BASE_URL=https://www.saucedemo.com
 .venv\Scripts\pytest -q
 ```
-
-也可以直接双击 `run-tests.cmd` 一键跑全量；想带参数就在命令行里 `run-tests.cmd -m smoke`，脚本会把参数原样透传给 pytest。
 
 PowerShell 里用 `$env:BASE_URL = 'https://www.saucedemo.com'`（不设则为本地默认值）。
 
