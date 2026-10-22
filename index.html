@@ -22,7 +22,9 @@
     var s = JSON.parse(localStorage.getItem(k) || '{}');
     s.language = 'zh';
     localStorage.setItem(k, JSON.stringify(s));
-  } catch (e) { /* 隐私模式下忽略 */ }
+  } catch (e) {
+    /* 浏览器隐私模式禁用 localStorage 时忽略，报告仍可正常打开 */
+  }
 </script>
     <script src="app.js"></script>
     <script src="plugin/behaviors/index.js"></script>
@@ -35,7 +37,7 @@
         gtag('js', new Date());
         gtag('config', 'G-FVWC4GKEYS', {
           'allureVersion': '2.30.0',
-          'reportUuid': '5601d029-47c8-4955-a9fa-5c3ff24784af',
+          'reportUuid': '5f0b762f-2048-4655-8d31-442b9edcba90',
           'single_file': false
         });
     </script>
