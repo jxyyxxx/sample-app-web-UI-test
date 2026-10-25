@@ -8,16 +8,32 @@
 # ============================================================
 
 import os
+import time
 
 import allure
 import pytest
 
 from common.data_loader import data_loader
-from common.reporting import generate_local_report, prepare_allure_inputs
+from common.reporting import (
+    detect_scope,
+    generate_local_report,
+    prepare_allure_inputs,
+    resolve_results_dir,
+)
 from pages.login_page import LoginPage
 
 # 账号数据：data/login/accounts.yaml（加账号不用改代码）
 accounts = data_loader.load("login/accounts.yaml")
+
+
+# ------------------------------------------------------------
+# 0. 会话开始：记录开始时间
+#    pytest 9 不再设置 session.start_time（老版本由 Session 自己写），
+#    而运行器标签和归档目录名都要用会话开始时间，不能退化成"写文件的时刻"，
+#    所以这里自己记一份。
+# ------------------------------------------------------------
+def pytest_sessionstart(session):
+    session.start_time = time.time()
 
 
 # ------------------------------------------------------------
@@ -67,14 +83,14 @@ def pytest_runtest_makereport(item, call):
 
 
 # ------------------------------------------------------------
-# 4. 会话结束：写报告环境面板 + 本地生成报告
+# 4. 会话结束：写报告环境面板 + 本地生成报告（含归档）
 #    CI 里跳过生成：workflow 已显式生成，且没有浏览器可开
 # ------------------------------------------------------------
 def pytest_sessionfinish(session, exitstatus):
     """
     测试会话结束后：
     1. 准备报告输入：拷历史（趋势）→ 环境面板 + 失败分类 → 运行器
-    2. 本地生成 Allure 报告、设中文、打开浏览器
+    2. 本地生成 Allure 报告、存回历史、归档、设中文、打开浏览器
 
     这些都放在会话结束时做，是为了避开 allure 的 --clean-alluredir：
     它在会话开始时清空结果目录，先写会被清掉。
@@ -84,4 +100,8 @@ def pytest_sessionfinish(session, exitstatus):
     if os.getenv("CI"):
         return
 
-    generate_local_report()
+    generate_local_report(
+        results_dir=resolve_results_dir(session),
+        scope=detect_scope(session),
+        started_at=getattr(session, "start_time", None),
+    )
