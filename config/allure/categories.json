@@ -1,0 +1,22 @@
+[
+  {
+    "name": "被测应用不可用（服务未启动 / 连接失败）",
+    "matchedStatuses": ["broken", "failed"],
+    "messageRegex": "(?s).*(net::ERR_|ERR_CONNECTION_REFUSED|ECONNREFUSED|ConnectError).*"
+  },
+  {
+    "name": "元素定位失败 / 操作超时（页面结构与预期不符）",
+    "matchedStatuses": ["broken", "failed"],
+    "messageRegex": "(?s).*Timeout \\d+ms exceeded.*"
+  },
+  {
+    "name": "断言失败（功能不符合预期）",
+    "matchedStatuses": ["failed"],
+    "messageRegex": "(?s)^(?!.*Timeout \\d+ms exceeded).*(AssertionError|Locator expected to|Expect \").*"
+  },
+  {
+    "name": "用例代码异常（框架 / 测试脚本问题）",
+    "matchedStatuses": ["broken"],
+    "messageRegex": "(?s).*(TypeError|AttributeError|KeyError|NameError|IndexError|FixtureLookupError).*"
+  }
+]
