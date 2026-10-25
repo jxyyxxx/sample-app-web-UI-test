@@ -1,5 +1,5 @@
 # ============================================================
-# 工具层：Allure 报告相关（环境面板、生成、默认语言）
+# 工具层：Allure 报告相关（环境面板、失败分类、运行器、历史趋势、生成）
 #
 # conftest.py 只负责在 pytest 钩子里调用这里的函数，具体实现都在这里。
 #
@@ -9,6 +9,7 @@
 # ============================================================
 
 import argparse
+import json
 import os
 import platform
 import shutil
@@ -21,6 +22,22 @@ from config.settings import BASE_URL, ROOT_DIR
 # 结果目录与报告目录（与 pytest.ini 的 --alluredir 保持一致）
 RESULTS_DIR = "reports/allure-results"
 REPORT_DIR = "reports/allure-html"
+
+# 失败分类规则的仓库内路径（跑测试时拷进结果目录）
+CATEGORIES_SRC = os.path.join("config", "allure", "categories.json")
+
+# 历史（趋势）的仓库内位置。必须放在结果目录之外：
+# pytest.ini 的 --clean-alluredir 每次会话开始都会清空结果目录。
+HISTORY_DIR = "reports/allure-history"
+HISTORY_KEEP = 20  # 趋势图与每条用例的历史，只保留最近 20 次运行
+
+# 这四个文件都是"每跑一次追加一条"的数组，截断时必须同步处理，否则各图点数会不一致
+TREND_FILES = (
+    "history-trend.json",
+    "duration-trend.json",
+    "categories-trend.json",
+    "retry-trend.json",
+)
 
 # ---- 默认语言注入 ----------------------------------------------------------
 MARKER = "<!-- allure-default-language -->"
@@ -123,13 +140,18 @@ def _browser_name(session):
 
 def write_allure_metadata(session):
     """
-    写入 Allure 环境面板（Allure 的 Environment 栏读的就是这个文件）
+    往结果目录写两份元数据：
+
+    1. environment.properties —— Allure 报告左侧「环境」面板的数据源
+    2. categories.json —— 失败分类规则，报告里「分类」页靠它把失败归到
+       「应用不可用 / 元素超时 / 断言失败 / 用例异常」，而不是默认的
+       「产品缺陷 / 测试缺陷」两格
 
     时机：必须在 allure 的 --clean-alluredir 之后写，所以放在会话结束时调用；
          它是会话开始时清空结果目录的，先写会被清掉。
 
     :param session: pytest 会话对象
-    :return: 生成的文件路径
+    :return: environment.properties 的生成路径
     """
     # 以实际生效的 --alluredir 为准：pytest.ini 里是默认值，命令行可能覆盖
     results_dir = getattr(session.config.option, "allure_report_dir", None) or RESULTS_DIR
@@ -150,7 +172,168 @@ def write_allure_metadata(session):
     with open(path, "w", encoding="utf-8") as f:
         for key, value in properties.items():
             f.write(f"{key}={value}\n")
+
+    # 分类规则常驻 config/，每次跑测试时拷进结果目录。
+    # 不直接放在结果目录里，是因为 --clean-alluredir 会在会话开始时清空它。
+    if os.path.exists(CATEGORIES_SRC):
+        shutil.copyfile(CATEGORIES_SRC, os.path.join(results_dir, "categories.json"))
+
     return path
+
+
+# ---- 历史（趋势）-----------------------------------------------------------
+def _read_json(path):
+    """读 json，读不到或格式不对统一返回 None（报告辅助本身不该让用例失败）"""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def _write_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+
+
+def sync_history_in(results_dir=RESULTS_DIR):
+    """
+    把上一轮的历史拷进结果目录（生成前调用）
+
+    Allure 只从「输入目录」（--alluredir 指向的地方）读历史，不看输出目录，
+    也不是"不删输出目录就会自动累积"——那套写法在 2.30 上会直接报错。
+    所以历史必须先落到结果目录里，再执行 generate --clean 才能接上。
+
+    :return: True 表示拷了历史；False 表示还没有历史（首次运行）
+    """
+    if not os.path.isdir(HISTORY_DIR) or not os.listdir(HISTORY_DIR):
+        return False
+
+    dst = os.path.join(results_dir, "history")
+    shutil.rmtree(dst, ignore_errors=True)
+    shutil.copytree(HISTORY_DIR, dst)
+    return True
+
+
+def _truncate_history(history_dir, keep=HISTORY_KEEP):
+    """把趋势数组和每个用例的历史条目截断到最近 keep 条（原地改写）"""
+    for name in TREND_FILES:
+        path = os.path.join(history_dir, name)
+        data = _read_json(path)
+        if isinstance(data, list) and len(data) > keep:
+            _write_json(path, data[-keep:])
+
+    path = os.path.join(history_dir, "history.json")
+    data = _read_json(path)
+    if not isinstance(data, dict):
+        return
+
+    changed = False
+    for entry in data.values():
+        items = entry.get("items") if isinstance(entry, dict) else None
+        if isinstance(items, list) and len(items) > keep:
+            entry["items"] = items[-keep:]
+            changed = True
+    if changed:
+        _write_json(path, data)
+
+
+def sync_history_out(report_dir=REPORT_DIR):
+    """
+    把本次生成的历史存回仓库目录，并截断到最近 HISTORY_KEEP 次（生成后调用）
+
+    存回的位置独立于报告目录，所以删掉 allure-html 不会把历史一起丢掉。
+
+    :return: True 表示已保存
+    """
+    src = os.path.join(report_dir, "history")
+    if not os.path.isdir(src):
+        return False
+
+    os.makedirs(HISTORY_DIR, exist_ok=True)
+    for name in os.listdir(src):
+        shutil.copyfile(os.path.join(src, name), os.path.join(HISTORY_DIR, name))
+
+    _truncate_history(HISTORY_DIR)
+    return True
+
+
+# ---- 运行器 ----------------------------------------------------------------
+def _repo_commit():
+    """测试框架自身的 commit：同一台机器上不同代码版本跑出来的报告要能区分开"""
+    try:
+        result = subprocess.run(
+            ["git", "-C", ROOT_DIR, "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return ""
+
+
+def _build_order(results_dir):
+    """本地口径的 buildOrder：第几次运行 = 已有历史条数 + 1"""
+    data = _read_json(os.path.join(results_dir, "history", "history-trend.json"))
+    return len(data) + 1 if isinstance(data, list) else 1
+
+
+def write_executor(results_dir=RESULTS_DIR):
+    """
+    写 executor.json：报告的「运行器」面板 + 趋势图的横轴标签
+
+    趋势图每个点靠 buildOrder 排序、靠 buildName 标注。缺这个文件时，
+    历史条目里只有 data 没有名字，趋势图就是一串无名点——所以它和历史是一件事。
+
+    :param results_dir: 结果目录（跟随实际 --alluredir）
+    :return: executor.json 的生成路径
+    """
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        server = os.getenv("GITHUB_SERVER_URL", "")
+        repo = os.getenv("GITHUB_REPOSITORY", "")
+        run_id = os.getenv("GITHUB_RUN_ID", "")
+        number = os.getenv("GITHUB_RUN_NUMBER", "")
+        workflow = os.getenv("GITHUB_WORKFLOW", "CI")
+        executor = {
+            "name": "GitHub Actions",
+            "type": "github",
+            # CI 的 run number 天然单调递增，比本地推算更可靠
+            "buildOrder": int(number) if number.isdigit() else _build_order(results_dir),
+            "buildName": f"{workflow} #{number}",
+            "buildUrl": f"{server}/{repo}/actions/runs/{run_id}" if run_id else "",
+            "reportName": f"{workflow} #{number}",
+        }
+    else:
+        order = _build_order(results_dir)
+        commit = _repo_commit()
+        label = f"本地 第{order}次" + (f" · {commit}" if commit else "")
+        executor = {
+            "name": "本地运行",
+            "type": "local",
+            "buildOrder": order,
+            "buildName": label,
+            "reportName": label,
+        }
+
+    os.makedirs(results_dir, exist_ok=True)
+    path = os.path.join(results_dir, "executor.json")
+    _write_json(path, executor)
+    return path
+
+
+def prepare_allure_inputs(session):
+    """
+    会话结束时的报告准备：历史 → 环境面板/分类 → 运行器
+
+    顺序有依赖：先拷历史，write_executor 才能按"已经跑过几次"算出 buildOrder。
+
+    :param session: pytest 会话对象
+    """
+    # 以实际生效的 --alluredir 为准：pytest.ini 里是默认值，命令行可能覆盖
+    results_dir = getattr(session.config.option, "allure_report_dir", None) or RESULTS_DIR
+
+    sync_history_in(results_dir)
+    write_allure_metadata(session)
+    write_executor(results_dir)
 
 
 # ---- 报告生成 --------------------------------------------------------------
@@ -174,6 +357,9 @@ def generate_local_report(results_dir=RESULTS_DIR, report_dir=REPORT_DIR):
     except subprocess.CalledProcessError as e:
         print(f"Allure 报告生成失败：{e}")
         return False
+
+    # 生成后把历史存回仓库目录，下一次运行才有趋势可接
+    sync_history_out(report_dir)
 
     set_default_language(report_dir)
     index = os.path.join(report_dir, "index.html")

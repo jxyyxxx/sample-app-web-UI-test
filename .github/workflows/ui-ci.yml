@@ -38,6 +38,24 @@ jobs:
       - name: 拉取测试代码
         uses: actions/checkout@v4
 
+      - name: 恢复历史趋势（取 gh-pages 上上一份报告的 history）
+        run: |
+          set -euo pipefail
+          mkdir -p reports/allure-history
+          # gh-pages 分支根目录就是 publish_dir 的内容，history/ 也在这层
+          if git fetch origin gh-pages --depth=1 2>/dev/null; then
+            git checkout origin/gh-pages -- history 2>/dev/null || true
+            if [ -d history ]; then
+              cp -r history/. reports/allure-history/
+              rm -rf history
+              echo "已恢复历史文件：$(ls reports/allure-history | wc -l) 个"
+            else
+              echo "gh-pages 上没有 history 目录，按首次运行处理"
+            fi
+          else
+            echo "gh-pages 分支不存在（首次运行），从零开始"
+          fi
+
       - name: 克隆被测应用（锁定 commit）
         run: |
           set -euo pipefail

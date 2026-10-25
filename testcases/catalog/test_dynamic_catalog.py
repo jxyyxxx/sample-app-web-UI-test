@@ -53,7 +53,13 @@ class TestDynamicCatalogSlider:
 
     @allure.title("点击圆点切换到对应商品")
     def test_click_dot_switches_item(self, logged_in_page):
-        slider = DynamicCatalogSliderPage(logged_in_page).open().expect_loaded()
+        # 自动轮播每 2s 推进一次，会在点击与断言之间覆盖掉点击设置的下标，
+        # 造成"点击其实生效了、断言却超时"的假红。冻结时间后再打开，定时器不触发。
+        slider = (
+            DynamicCatalogSliderPage(logged_in_page)
+            .open_with_clock_frozen()
+            .expect_loaded()
+        )
         slider.expect_dot_count(6)
 
         slider.click_dot(2).expect_active_dot(2)

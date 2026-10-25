@@ -13,7 +13,7 @@ import allure
 import pytest
 
 from common.data_loader import data_loader
-from common.reporting import generate_local_report, write_allure_metadata
+from common.reporting import generate_local_report, prepare_allure_inputs
 from pages.login_page import LoginPage
 
 # 账号数据：data/login/accounts.yaml（加账号不用改代码）
@@ -73,13 +73,13 @@ def pytest_runtest_makereport(item, call):
 def pytest_sessionfinish(session, exitstatus):
     """
     测试会话结束后：
-    1. 写入环境面板（本地和 CI 都需要）
+    1. 准备报告输入：拷历史（趋势）→ 环境面板 + 失败分类 → 运行器
     2. 本地生成 Allure 报告、设中文、打开浏览器
 
-    environment.properties 放在会话结束时写，是为了避开 allure 的
-    --clean-alluredir：它在会话开始时清空结果目录，先写会被清掉。
+    这些都放在会话结束时做，是为了避开 allure 的 --clean-alluredir：
+    它在会话开始时清空结果目录，先写会被清掉。
     """
-    write_allure_metadata(session)
+    prepare_allure_inputs(session)
 
     if os.getenv("CI"):
         return

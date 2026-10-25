@@ -4,6 +4,11 @@ from playwright.sync_api import Page, expect
 from common.locator_utils import by_test_id
 from pages.base_page import BasePage
 
+# 假时钟参数：起点取固定值保证可重复；暂停点跳到 1 分钟后，
+# 此时页面还没加载，不会有定时器被这次跳转误触发
+_CLOCK_START_MS = 0
+_CLOCK_PAUSE_MS = 60_000
+
 
 class DynamicCatalogSliderPage(BasePage):
     """轮播目录页：/dynamic-catalog-slider.html
@@ -21,6 +26,19 @@ class DynamicCatalogSliderPage(BasePage):
 
     def dot(self, index):
         return self.page.locator(by_test_id(f"dynamic-catalog-slider-dot-{index}"))
+
+    @allure.step("打开页面并冻结时间（关闭自动轮播干扰）")
+    def open_with_clock_frozen(self):
+        """冻结页面时间后再打开，自动轮播的 setInterval 不会触发
+
+        轮播每 2s 推进一次 activeIndex，会覆盖点击圆点设置的值：
+        只要一次 tick 落在"点击生效"和"断言首次轮询"之间，圆点就一直是
+        false，要等 12s（6 个商品 × 2s）才轮转回来——断言 5s 超时必然失败。
+        冻结时间后 activeIndex 只由点击决定，结果才可稳定复现。
+        """
+        self.page.clock.install(time=_CLOCK_START_MS)
+        self.page.clock.pause_at(_CLOCK_PAUSE_MS)
+        return self.open()
 
     @allure.step("断言已进入轮播目录页")
     def expect_loaded(self):
