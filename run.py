@@ -33,6 +33,17 @@ if __name__ == "__main__":
     # 方式4：只执行冒烟用例
     # pytest.main(["-v", "-m", "smoke"])
 
+    # 方式5：可视化运行（弹出真实浏览器窗口，放慢动作，方便看过程）
+    # pytest.main([
+    #     "-v",
+    #     "--alluredir=reports/allure-results",
+    #     "--clean-alluredir",
+    #     "--headed",        # 关键：从无界面切到有界面
+    #     "--slowmo=300",    # 每个操作后停 300 毫秒，肉眼跟得上
+    # ])
+    #python -m pytest --headed --slowmo=300
+
+
     # ========== 说明 ==========
     # 测试结束后，conftest.py 中的 pytest_sessionfinish 钩子会自动：
     # 1. 写入 Allure 环境面板（被测地址、浏览器、应用 commit 等）

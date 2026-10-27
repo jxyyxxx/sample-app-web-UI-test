@@ -132,6 +132,7 @@ jobs:
           name: ui-reports-${{ github.run_attempt }}
           path: |
             reports/allure-results
+            reports/traces
             allure-report
             app.log
           if-no-files-found: warn

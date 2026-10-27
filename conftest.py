@@ -19,11 +19,24 @@ from common.reporting import (
     generate_local_report,
     prepare_allure_inputs,
     resolve_results_dir,
+    save_trace,
 )
 from pages.login_page import LoginPage
 
 # 账号数据：data/login/accounts.yaml（加账号不用改代码）
 accounts = data_loader.load("login/accounts.yaml")
+
+
+# ------------------------------------------------------------
+# 0.1 会话配置：默认开启 trace（只在失败时保留产物）
+#     retain-on-failure = 运行期间录制，用例通过就把产物丢掉、失败才留
+#     想临时关掉：TRACE=0；命令行显式传了 --tracing 时以命令行为准
+# ------------------------------------------------------------
+def pytest_configure(config):
+    if os.getenv("TRACE", "1") == "0":
+        config.option.tracing = "off"
+    elif getattr(config.option, "tracing", "off") == "off":
+        config.option.tracing = "retain-on-failure"
 
 
 # ------------------------------------------------------------
@@ -59,17 +72,21 @@ def logged_in_page(page):
 
 
 # ------------------------------------------------------------
-# 3. 失败截图：用例失败时截全页并挂到 Allure 报告
-#    只拦 call 阶段的失败，不影响用例本身的结果
+# 3. 失败现场：失败截图（call 阶段）+ trace 路径（teardown 阶段）
+#    都只挂附件，不影响用例本身的结果
 # ------------------------------------------------------------
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
 
-    if report.when != "call" or not report.failed:
-        return
+    if report.when == "call" and report.failed:
+        _attach_failure_screenshot(item)
+    elif report.when == "teardown":
+        _attach_trace(item)
 
+
+def _attach_failure_screenshot(item):
     page = item.funcargs.get("page")
     if page is None:
         return
@@ -80,6 +97,41 @@ def pytest_runtest_makereport(item, call):
     except Exception:
         # 截图失败不能影响用例本身的结果
         pass
+
+
+def _attach_trace(item):
+    """teardown 阶段收 trace：插件到这时代码才把 zip 落到 --output 目录
+
+    retain-on-failure 下通过的用例不留文件，所以目录里至多一个 zip。
+    收进来的是"移动"，插件那份不会重复占盘。
+    """
+    try:
+        output_dir = item.config.getoption("--output")
+    except (ValueError, AttributeError):
+        return
+
+    trace_path = None
+    for root, _dirs, files in os.walk(output_dir):
+        for name in files:
+            if name.startswith("trace") and name.endswith(".zip"):
+                trace_path = os.path.join(root, name)
+                break
+        if trace_path:
+            break
+
+    saved = save_trace(trace_path, item.session, item.name)
+    if not saved:
+        return
+
+    # 统一用 Windows 原生分隔符，粘贴到 CMD / PowerShell 里能直接跑
+    shown = os.path.normpath(saved)
+    allure.attach(
+        f"trace：{shown}\n"
+        f'查看：playwright show-trace "{shown}"\n'
+        f"或拖到 https://trace.playwright.dev 在线打开",
+        name="Trace 路径",
+        attachment_type=allure.attachment_type.TEXT,
+    )
 
 
 # ------------------------------------------------------------

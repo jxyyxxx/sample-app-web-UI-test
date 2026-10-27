@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -36,6 +37,15 @@ HISTORY_KEEP = 20  # 趋势图与每条用例的历史，只保留最近 20 次�
 ARCHIVE_ROOT = "reports/archive"
 ARCHIVE_KEEP_PASS = 20  # 通过的运行只留最近 20 份
 ARCHIVE_KEEP_FAIL = 30  # 有 failed/broken 的运行留最近 30 份（防服务全挂时无限增长）
+
+# Playwright trace（失败现场回放）
+# 不进 Allure 报告、也不进 archive：trace 单份几 MB，跟报告绑一起会把归档撑爆，
+# 而两者的生命周期也不同——报告要留几十次回溯趋势，trace 只为最近这次问题服务。
+TRACE_DIR = "reports/traces"
+TRACE_KEEP = 5  # 只保留最近 5 次运行的 trace
+
+# 插件（pytest-playwright）先把 trace 写到 --output 目录，我们移走后清掉这个暂存目录
+PLAYWRIGHT_ARTIFACTS_DIR = "reports/playwright-artifacts"
 
 # 这四个文件都是"每跑一次追加一条"的数组，截断时必须同步处理，否则各图点数会不一致
 TREND_FILES = (
@@ -434,6 +444,10 @@ def prepare_allure_inputs(session):
         started_at=getattr(session, "start_time", None),
     )
 
+    # trace 在每条用例的 teardown 阶段就收好了，这里只做保留与清场（本地和 CI 都要）
+    prune_traces()
+    cleanup_playwright_artifacts()
+
 
 # ---- 报告归档 --------------------------------------------------------------
 def _report_status(report_dir):
@@ -515,6 +529,85 @@ def archive_report(results_dir=RESULTS_DIR, report_dir=REPORT_DIR, scope="full",
     _prune_archive(scope)
     print(f"报告已归档：{dest}")
     return dest
+
+
+# ---- Playwright trace（失败现场回放）---------------------------------------
+def _seq_key(name):
+    """按目录名开头的整数序号排序：跑到第 1000 次时 "1000_" 不会排到 "999_" 前面
+
+    序号相同时（例如有几次运行没生成报告、历史没推进）再按名字排，
+    名字里带时间戳，等价于按时间先后排。
+    """
+    head = name.split("_")[0]
+    return (int(head) if head.isdigit() else 0, name)
+
+
+def _history_count():
+    """已积累的历史条数（= 已跑过几次），不依赖结果目录里的副本"""
+    data = _read_json(os.path.join(HISTORY_DIR, "history-trend.json"))
+    return len(data) if isinstance(data, list) else 0
+
+
+def trace_run_dir(session, started_at=None):
+    """
+    本次运行的 trace 目录：{序号:03d}_{日期}_{时间}
+
+    与 archive/full/ 下的目录同名同序号，排查时能一眼对上"第几次运行"。
+    序号和 archive 用的是同一套口径（历史条数 + 1），所以两边一定一致。
+    """
+    label = getattr(session, "_trace_run_label", None)
+    if label is None:
+        order = _history_count() + 1
+        moment = datetime.fromtimestamp(started_at) if started_at else datetime.now()
+        label = f"{order:03d}_{moment.strftime('%Y-%m-%d_%H-%M-%S')}"
+        session._trace_run_label = label
+    return os.path.join(TRACE_DIR, label)
+
+
+def save_trace(trace_path, session, test_name):
+    """
+    把插件写出的 trace.zip 收进 reports/traces/{运行目录}/，返回保存后的路径
+
+    用移动而不是复制：插件那份留在 --output 里会和这边重复占盘。
+    移不动（比如被占用）时退回复制，不让收尾流程失败。
+
+    :return: 保存后的路径；没有 trace 或收不进来时返回 None
+    """
+    if not trace_path or not os.path.exists(trace_path):
+        return None
+
+    dest_dir = trace_run_dir(session, getattr(session, "start_time", None))
+    os.makedirs(dest_dir, exist_ok=True)
+
+    safe = re.sub(r"[^\w.\-]+", "_", test_name).strip("_") or "trace"
+    dest = os.path.join(dest_dir, f"{safe}.zip")
+
+    try:
+        shutil.move(trace_path, dest)
+    except (OSError, shutil.Error):
+        try:
+            shutil.copy2(trace_path, dest)
+        except OSError:
+            return None
+    return dest
+
+
+def prune_traces(keep=TRACE_KEEP):
+    """只保留最近 keep 次运行的 trace 目录"""
+    if keep <= 0 or not os.path.isdir(TRACE_DIR):
+        return
+    names = sorted(
+        (name for name in os.listdir(TRACE_DIR)
+         if os.path.isdir(os.path.join(TRACE_DIR, name))),
+        key=_seq_key,
+    )
+    for name in names[:-keep]:
+        shutil.rmtree(os.path.join(TRACE_DIR, name), ignore_errors=True)
+
+
+def cleanup_playwright_artifacts():
+    """trace 已经移走，清掉插件的暂存目录，避免 reports/ 下堆空壳"""
+    shutil.rmtree(PLAYWRIGHT_ARTIFACTS_DIR, ignore_errors=True)
 
 
 # ---- 报告生成 --------------------------------------------------------------
