@@ -5,7 +5,7 @@
 - 仓库地址：<https://github.com/jxyyxxx/sample-app-web-UI-test>
 - 在线 Allure 报告：<https://jxyyxxx.github.io/sample-app-web-UI-test/>
 
-这个仓库是我给开源的 SauceDemo 做的 Web UI 自动化测试。被测应用不是我写的——Sauce Labs 的 sample-app-web（React + Vite，MIT），我把它跑在本地；我写的是测试侧：六层框架、10 个页面对象、24 条用例、Allure 报告体系、GitHub Actions 流水线。
+这个仓库是我给开源的 SauceDemo 做的 Web UI 自动化测试。我对此项目做了测试侧：六层框架、10 个页面对象、24 条用例、Allure 报告体系、GitHub Actions 流水线。
 
 动手之前我给自己定了三个标准：用例要能抓到真问题，功能坏了它得红，而不是只证明"页面能打开"；失败要能分流，一眼看出该找开发、查部署还是查用例；报告要能自证，同一套用例跑的是哪个版本的应用、第几次跑、全量还是冒烟，都得写在报告里。后面的设计基本都是围绕这三件事的取舍。
 
