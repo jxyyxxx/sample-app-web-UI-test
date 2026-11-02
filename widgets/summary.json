@@ -1,1 +1,1 @@
-{"reportName":"UI CI #16","testRuns":[],"statistic":{"failed":0,"broken":0,"skipped":0,"passed":24,"unknown":0,"total":24},"time":{"start":1793171040627,"stop":1793171068527,"duration":27900,"minDuration":110,"maxDuration":2643,"sumDuration":14906}}
+{"reportName":"UI CI #17","testRuns":[],"statistic":{"failed":0,"broken":0,"skipped":0,"passed":24,"unknown":0,"total":24},"time":{"start":1793588681702,"stop":1793588711003,"duration":29301,"minDuration":76,"maxDuration":2738,"sumDuration":15371}}
